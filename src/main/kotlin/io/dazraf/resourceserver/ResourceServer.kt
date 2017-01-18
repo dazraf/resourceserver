@@ -35,6 +35,7 @@ class ResourceServer : AbstractVerticle() {
         .setDirectoryListing(true)
 
     router.get("/*").handler { sh.handle(it) }
+    router.delete("/*").handler { it.deleteHandler() }
     BASE_DIR.mkdir()
 
     vertx.createHttpServer()
@@ -46,10 +47,26 @@ class ResourceServer : AbstractVerticle() {
 
   fun RoutingContext.postHandler() {
     val file = File(BASE_DIR, this.request().path())
-
+    file.parentFile.mkdir()
     val contents = this.body
     vertx.fileSystem().writeFile(file.canonicalPath, contents) {
-      response().setStatusCode(200).setStatusMessage("uploaded").end()
+      if (it.succeeded()) {
+        response().setStatusCode(200).setStatusMessage("uploaded " + request().path()).end()
+      } else {
+        response().setStatusCode(500).setStatusMessage("failed to upload " + request().path()).end()
+      }
+    }
+  }
+
+  private fun RoutingContext.deleteHandler() {
+    val file = File(BASE_DIR, this.request().path())
+    vertx.fileSystem().delete(file.canonicalPath) {
+      if (it.succeeded()) {
+        response().setStatusCode(200).setStatusMessage("deleted " + request().path()).end()
+      } else {
+        response().setStatusCode(404).setStatusMessage("failed to delete " + request().path()).end()
+      }
     }
   }
 }
+
