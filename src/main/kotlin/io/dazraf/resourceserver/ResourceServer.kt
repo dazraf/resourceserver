@@ -3,13 +3,17 @@ package io.dazraf.resourceserver
 import io.vertx.core.AbstractVerticle
 import io.vertx.core.Future
 import io.vertx.core.Vertx
+import io.vertx.core.json.JsonObject
+import io.vertx.ext.auth.shiro.ShiroAuth
+import io.vertx.ext.auth.shiro.ShiroAuthOptions
+import io.vertx.ext.auth.shiro.ShiroAuthRealmType
 import io.vertx.ext.web.Router
 import io.vertx.ext.web.RoutingContext
-import io.vertx.ext.web.handler.BodyHandler
-import io.vertx.ext.web.handler.StaticHandler
+import io.vertx.ext.web.handler.*
+import io.vertx.ext.web.sstore.LocalSessionStore
 import org.slf4j.LoggerFactory.getLogger
 import java.io.File
-import java.io.FileWriter
+
 
 class ResourceServer : AbstractVerticle() {
   val BASE_DIR = File("files")
@@ -26,7 +30,19 @@ class ResourceServer : AbstractVerticle() {
 
   override fun start(startFuture: Future<Void>) {
     val router = Router.router(vertx)
+
+    router.route().handler(CookieHandler.create())
+    router.route().handler(SessionHandler.create(LocalSessionStore.create(vertx)))
+    val config = JsonObject().put("properties_path", "classpath:vertx-users.properties")
+
+    val provider = ShiroAuth.create(vertx, ShiroAuthOptions().setType(ShiroAuthRealmType.PROPERTIES).setConfig(config))
+    router.route().handler(UserSessionHandler.create(provider))
+
+    val basicAuthHandler = BasicAuthHandler.create(provider)
+
     router.route().handler(BodyHandler.create())
+    router.post("/*").handler { basicAuthHandler.handle(it) }
+
     router.post("/*").handler { it.postHandler() }
     val sh = StaticHandler.create()
         .setAllowRootFileSystemAccess(true)
@@ -47,7 +63,7 @@ class ResourceServer : AbstractVerticle() {
 
   fun RoutingContext.postHandler() {
     val file = File(BASE_DIR, this.request().path())
-    val created = file.parentFile.canonicalFile.mkdir()
+    file.parentFile.canonicalFile.mkdir()
     val contents = this.body
     vertx.fileSystem().writeFile(file.canonicalPath, contents) {
       if (it.succeeded()) {
