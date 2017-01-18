@@ -47,7 +47,7 @@ class ResourceServer : AbstractVerticle() {
 
   fun RoutingContext.postHandler() {
     val file = File(BASE_DIR, this.request().path())
-    file.parentFile.mkdir()
+    val created = file.parentFile.canonicalFile.mkdir()
     val contents = this.body
     vertx.fileSystem().writeFile(file.canonicalPath, contents) {
       if (it.succeeded()) {
@@ -60,12 +60,10 @@ class ResourceServer : AbstractVerticle() {
 
   private fun RoutingContext.deleteHandler() {
     val file = File(BASE_DIR, this.request().path())
-    vertx.fileSystem().delete(file.canonicalPath) {
-      if (it.succeeded()) {
-        response().setStatusCode(200).setStatusMessage("deleted " + request().path()).end()
-      } else {
-        response().setStatusCode(404).setStatusMessage("failed to delete " + request().path()).end()
-      }
+    if (file.canonicalFile.deleteRecursively()) {
+      response().setStatusCode(200).setStatusMessage("deleted " + request().path()).end()
+    } else {
+      response().setStatusCode(404).setStatusMessage("failed to delete " + request().path()).end()
     }
   }
 }
